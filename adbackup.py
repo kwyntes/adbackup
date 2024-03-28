@@ -251,6 +251,10 @@ except (KeyboardInterrupt, ADBError):
             f.write('%s|%d|%s\n' % (mtime, size, fpath))
 
     write_rename_index()
+    
+    con.print('[red]Interrupted.[/] [magenta].partial_android_files[/] written.')
+
+    sys.exit()
 
 
 for afpath in track(to_link, description='Hardlinking previously copied files...'):
@@ -269,7 +273,7 @@ for afpath in track(to_link, description='Hardlinking previously copied files...
 if recovery_mode:
     os.remove(os.path.join(budir, '.partial_android_files'))
 
-with open(os.path.join(budir, '.android_files'), 'w'):
+with open(os.path.join(budir, '.android_files'), 'w') as f:
     for af in android_files:
         f.write('%s\n' % af)
 
