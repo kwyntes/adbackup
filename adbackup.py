@@ -102,15 +102,17 @@ for ename in os.listdir():
         except ValueError:
             # couldn't parse date, is not a backup dir
             continue
+
+        if os.path.isfile(os.path.join(ename, '.android_files')) or \
+           os.path.isfile(os.path.join(ename, '.partial_android_files')):
+            if lastbudate is None or budate > lastbudate:
+                lastbudir = ename
+                lastbudate = budate
+
         if os.path.isfile(os.path.join(ename, '.android_files')):
             if lastlinkabledate is None or budate > lastlinkabledate:
                 lastlinkabledir = ename
                 lastlinkabledate = budate
-
-            if os.path.isfile(os.path.join(ename, '.partial_android_files')):
-                if lastbudate is None or budate > lastbudate:
-                    lastbudir = ename
-                    lastbudate = budate
 
 if lastbudir is not None:
     recovery_mode = os.path.isfile(
