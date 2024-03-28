@@ -16,4 +16,7 @@ small file transfers aren't impacted by the round-trip overhead of spawning subp
 
 - for some weird fucking reason `adb.exe` sometimes randomly decides to stop
   emitting progress information at all and i have no idea why nor what to do about
-  it.
+  it.  
+  like it just does sometimes. and then it works again later. the source code
+  doesn't make it any clearer either.
+  bug report: https://issuetracker.google.com/issues/331682040
