@@ -120,7 +120,7 @@ if lastbudir is not None:
 
     with open(os.path.join(lastbudir,
                            '.partial_android_files' if recovery_mode
-                           else '.android_files')) as f:
+                           else '.android_files'), encoding='utf8') as f:
         # list of tuples of (mtime, size, fpath)
         last_android_files = [l.split('|', 2)
                               for l in f.read().splitlines()]
@@ -129,7 +129,7 @@ if lastbudir is not None:
 
     if recovery_mode:
         if lastlinkabledir is not None:
-            with open(os.path.join(lastlinkabledir, '.android_files')) as f:
+            with open(os.path.join(lastlinkabledir, '.android_files'), encoding='utf8') as f:
                 # list of tuples of (mtime, size, fpath)
                 last_linkable_android_files = [l.split('|', 2)
                                                for l in f.read().splitlines()]
@@ -212,7 +212,7 @@ class TransferProgress(Progress):
 
 
 if recovery_mode and os.path.isfile(os.path.join(budir, '.rename_index')):
-    with open(os.path.join(budir, '.rename_index')) as f:
+    with open(os.path.join(budir, '.rename_index'), encoding='utf8') as f:
         rename_index = f.read()
 else:
     rename_index = ''
@@ -224,7 +224,7 @@ def write_rename_index():
     if not rename_index:
         return
 
-    with open(os.path.join(budir, '.rename_index'), 'w') as f:
+    with open(os.path.join(budir, '.rename_index'), 'w', encoding='utf8') as f:
         f.write(rename_index)
 
 
@@ -237,7 +237,7 @@ try:
             '', kind='overall', total=total_bytes_to_copy, totalfiles=len(to_copy), fileno=1)
 
         for fidx, (mtime, size, afpath) in enumerate(to_copy):
-            progress.update(overall_task, # run while you still can
+            progress.update(overall_task,  # run while you still can
                             fileno=str(fidx+1).ljust(len(str(len(to_copy)))))
 
             relpath = os.path.relpath(afpath, ANDROID_PATH)
@@ -268,7 +268,7 @@ try:
             transferred.append((mtime, size, afpath))
 
 except (KeyboardInterrupt, ADBError):
-    with open(os.path.join(budir, '.partial_android_files'), 'w') as f:
+    with open(os.path.join(budir, '.partial_android_files'), 'w', encoding='utf8') as f:
         for mtime, size, fpath in transferred:
             f.write('%s|%d|%s\n' % (mtime, size, fpath))
 
@@ -295,7 +295,7 @@ for afpath in track(to_link, description='Hardlinking previously copied files...
 if recovery_mode:
     os.remove(os.path.join(budir, '.partial_android_files'))
 
-with open(os.path.join(budir, '.android_files'), 'w') as f:
+with open(os.path.join(budir, '.android_files'), 'w', encoding='utf8') as f:
     for af in android_files:
         f.write('%s\n' % af)
 
