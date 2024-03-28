@@ -204,7 +204,8 @@ class TransferProgress(Progress):
                                 BarColumn(bar_width=None),
                                 "[progress.percentage]{task.percentage:>3.1f}%",
                                 "•", MofNCompleteColumn(),
-                                "•", TimeElapsedColumn())
+                                "•", TimeElapsedColumn(),
+                                "•", TimeRemainingColumn())
             yield self.make_tasks_table([task])
 
 
