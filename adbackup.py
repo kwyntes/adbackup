@@ -201,10 +201,11 @@ class TransferProgress(Progress):
                                 "•", TransferSpeedColumn(),
                                 "•", TimeRemainingColumn())
             elif task.fields.get('kind') == 'overall':
-                self.columns = (TextColumn("Copying new/updated files..."),
+                self.columns = (TextColumn("Copying new/updated files... ({task.fields[fileno]}/{task.fields[totalfiles]})"),
                                 BarColumn(bar_width=None),
                                 "[progress.percentage]{task.percentage:>3.1f}%",
-                                "•", MofNCompleteColumn(),
+                                "•", FileSizeColumn(),
+                                "/", TotalFileSizeColumn(),
                                 "•", TimeElapsedColumn(),
                                 "•", TimeRemainingColumn())
             yield self.make_tasks_table([task])
@@ -227,10 +228,17 @@ def write_rename_index():
         f.write(rename_index)
 
 
+total_bytes_to_copy = sum(size for _, size, _ in to_copy)
+total_bytes_copied = 0
+
 try:
     with TransferProgress() as progress:
-        overall_task = progress.add_task('', kind='overall')
-        for mtime, size, afpath in progress.track(to_copy, task_id=overall_task):
+        overall_task = progress.add_task(
+            '', kind='overall', total=total_bytes_to_copy, totalfiles=len(to_copy), fileno=1)
+
+        for fidx, (mtime, size, afpath) in enumerate(to_copy):
+            progress.update(overall_task, fileno=fidx+1)
+
             relpath = os.path.relpath(afpath, ANDROID_PATH)
             saferelpath = sanitize_filepath(relpath)
             if saferelpath != relpath:
@@ -249,10 +257,13 @@ try:
                         percentage = int(line[1:4].strip())
                         progress.update(
                             file_task, completed=percentage/100 * size)
+                        progress.update(
+                            overall_task, completed=total_bytes_copied + percentage/100 * size)
                     except ValueError:
                         pass
             progress.remove_task(file_task)
 
+            total_bytes_copied += size
             transferred.append((mtime, size, afpath))
 
 except (KeyboardInterrupt, ADBError):
