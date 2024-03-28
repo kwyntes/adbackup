@@ -158,14 +158,14 @@ to_link = []
 for af in android_files:
     mtime, size, fpath = af.split('|', 2)
     lix = bisect_left(last_android_files, fpath, key=lambda x: x[2])
-    if lix == len(last_android_files):
+    if lix == len(last_android_files) or last_android_files[lix][2] != fpath:
         if not recovery_mode:
             # not in last_android_files, file is new
             to_copy.append((mtime, int(size), fpath))
         else:
             llix = bisect_left(last_linkable_android_files,
                                fpath, key=lambda x: x[2])
-            if llix == len(last_linkable_android_files):
+            if llix == len(last_linkable_android_files) or last_linkable_android_files[llix][2] != fpath:
                 # not in last_linkable_android_fiiles, file actually is new
                 to_copy.append((mtime, int(size), fpath))
             else:
