@@ -163,7 +163,8 @@ for af in android_files:
             # not in last_android_files, file is new
             to_copy.append((mtime, int(size), fpath))
         else:
-            llix = bisect_left(last_linkable_android_files, fpath, key=lambda x: x[2])
+            llix = bisect_left(last_linkable_android_files,
+                               fpath, key=lambda x: x[2])
             if llix == len(last_linkable_android_files):
                 # not in last_linkable_android_fiiles, file actually is new
                 to_copy.append((mtime, int(size), fpath))
@@ -184,7 +185,7 @@ for af in android_files:
             # file up to date
             to_link.append(fpath)
 
-            # (if in recovery mode, the file will already be present in the 
+            # (if in recovery mode, the file will already be present in the
             # current directory, so we don't need to link anything)
 
 
@@ -219,10 +220,12 @@ transferred = []
 
 
 def write_rename_index():
-    if not rename_index: return
+    if not rename_index:
+        return
 
     with open(os.path.join(budir, '.rename_index'), 'w') as f:
         f.write(rename_index)
+
 
 try:
     with TransferProgress() as progress:
@@ -242,8 +245,12 @@ try:
                 # will output avg transfer speed info after transfer has finished,
                 # otherwise: [ nn]% <filename>
                 if line.startswith('['):
-                    percentage = int(line[1:4].strip())
-                    progress.update(file_task, completed=percentage/100 * size)
+                    try:  # apparently shit can go wrong here too
+                        percentage = int(line[1:4].strip())
+                        progress.update(
+                            file_task, completed=percentage/100 * size)
+                    except ValueError:
+                        pass
             progress.remove_task(file_task)
 
             transferred.append((mtime, size, afpath))
@@ -254,7 +261,7 @@ except (KeyboardInterrupt, ADBError):
             f.write('%s|%d|%s\n' % (mtime, size, fpath))
 
     write_rename_index()
-    
+
     con.print('[red]Interrupted.[/] [magenta].partial_android_files[/] written.')
 
     sys.exit()
@@ -284,4 +291,5 @@ program_time = (time.time() - program_start_time)
 program_time_fmat = ('%dh ' % (program_time / 3600) if program_time >= 3600 else '') + \
                     ('%dm ' % (program_time % 3600 / 60) if program_time >= 60 else '') + \
                     ('%ds' % (program_time % 60))
-con.print('[green]All operations completed in [cyan]%s[/][/]' % program_time_fmat)
+con.print('[green]All operations completed in [cyan]%s[/][/]' %
+          program_time_fmat)
