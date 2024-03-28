@@ -237,7 +237,8 @@ try:
             '', kind='overall', total=total_bytes_to_copy, totalfiles=len(to_copy), fileno=1)
 
         for fidx, (mtime, size, afpath) in enumerate(to_copy):
-            progress.update(overall_task, fileno=fidx+1)
+            progress.update(overall_task, # run while you still can
+                            fileno=str(fidx+1).ljust(len(str(len(to_copy)))))
 
             relpath = os.path.relpath(afpath, ANDROID_PATH)
             saferelpath = sanitize_filepath(relpath)
