@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime
 from queue import Empty, Queue
+from threading import Thread
 
 from pathvalidate import sanitize_filepath
 from rich.console import Console
@@ -40,37 +41,75 @@ class ADBError(Exception):
         self.err = err
 
 
-def invoke_adb(*args, progress_to_stop_on_error=None, raise_adb_error=False):
+def invoke_adb(*args, stdin=None, progress_to_stop_on_error=None, raise_adb_error=False):
     try:
         proc = subprocess.Popen([ADB_EXE, *args],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
+                                stdin=subprocess.PIPE if stdin else None,
                                 encoding='utf8',
                                 universal_newlines=True)
-        stdout = ''
-        for line in proc.stdout:
-            # filter out daemon start messages
-            if not line.startswith('*'):
-                stdout += line
-                yield line.rstrip('\n')
-        proc.stdout.close()
 
+        if stdin:
+            proc.stdin.write(stdin)
+            proc.stdin.close()
+
+        queue = Queue()
+
+        def enqueue_pipe(pipe, is_stderr):
+            for line in pipe:
+                queue.put((is_stderr, line))
+            queue.put(None)
+
+        Thread(target=enqueue_pipe, args=[proc.stdout, False]).start()
+        Thread(target=enqueue_pipe, args=[proc.stderr, True]).start()
+
+        stdout = ''
+        stderr = ''
+        # this allows a KeyboardInterrupt to be handled every .1s
+        # (normally queue.get prevents that, on Windows that is at least)
+        while True:
+            try:
+                if (v := queue.get(timeout=.1)) is None:
+                    break
+                is_stderr, line = v
+
+                # filter out daemon start messages
+                if is_stderr and not line.startswith('*'):
+                    stderr += line
+                    yield True, line.rstrip('\n')
+                if not is_stderr:
+                    stdout += line
+                    yield False, line.rstrip('\n')
+            except Empty:
+                pass
+
+        proc.stdout.close()
+        proc.stderr.close()
+
+        # FIXME: this error handling is extremely extremely shitty (prints
+        # ENTIRE stdout if stderr is empty)
+        # REAL FIXME: allow errors to be handled by caller. somehow.
         if proc.wait() != 0:
             if progress_to_stop_on_error:
                 progress_to_stop_on_error.stop()
 
-            err = proc.stderr.read() or stdout
-            con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' %
-                      escape(err), highlight=False)
+            err = next(iter(stderr.split('\n')[-1:]), '') or \
+                next(iter(stdout.split('\n')[-1:]), '')
+            err = err.lstrip('adb: error: ')
+
             if raise_adb_error:
                 raise ADBError(err)
             else:
+                con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' % escape(err))
                 sys.exit()
-        proc.stderr.close()
 
     except FileNotFoundError:
+        if progress_to_stop_on_error:
+            progress_to_stop_on_error.stop()
+
         con.print('[on red]FATAL[/] ADB executable (%s) not found' %
-                  escape(ADB_EXE), highlight=False)
+                  escape(ADB_EXE))
         sys.exit()
 
 
@@ -86,7 +125,7 @@ with con.status('Fetching file list...'):
     # printf: <last modified epoch>|<size>|<fpath>
     # will break when filenames contain newlines but that's just ridiculous
     android_files = []
-    for line in invoke_adb(
+    for _, line in invoke_adb(
             'exec-out', rf"find -H '{ANDROID_PATH}' -type f -printf '%T@|%s|%p\n'"):
         android_files.append(line)
 
@@ -206,6 +245,7 @@ class TransferProgress(Progress):
                                 "[progress.percentage]{task.percentage:>3.1f}%",
                                 "•", FileSizeColumn(),
                                 "/", TotalFileSizeColumn(),
+                                "•", TransferSpeedColumn(),
                                 "•", TimeElapsedColumn(),
                                 "•", TimeRemainingColumn())
             yield self.make_tasks_table([task])
@@ -216,6 +256,7 @@ if recovery_mode and os.path.isfile(os.path.join(budir, '.rename_index')):
         rename_index = f.read()
 else:
     rename_index = ''
+
 
 transferred = []
 
@@ -231,50 +272,101 @@ def write_rename_index():
 total_bytes_to_copy = sum(size for _, size, _ in to_copy)
 total_bytes_copied = 0
 
+meta_lookup = {afpath: (mtime, size) for mtime, size, afpath in to_copy}
+
+adb_err_handled = False
 try:
     with TransferProgress() as progress:
-        overall_task = progress.add_task(
-            '', kind='overall', total=total_bytes_to_copy, totalfiles=len(to_copy), fileno=1)
+        overall_task = progress.add_task('', start=False, kind='overall', totalfiles=len(to_copy),
+                                         total=total_bytes_to_copy, fileno=' '*len(str(len(to_copy))))
 
-        for fidx, (mtime, size, afpath) in enumerate(to_copy):
-            progress.update(overall_task,  # run while you still can
-                            fileno=str(fidx+1).ljust(len(str(len(to_copy)))))
-
+        src_dsts = []
+        rename_index_map = {}
+        for _, _, afpath in to_copy:
             relpath = os.path.relpath(afpath, ANDROID_PATH)
-            saferelpath = sanitize_filepath(relpath)
+            saferelpath = sanitize_filepath(relpath, platform='auto')
             if saferelpath != relpath:
-                rename_index += '%s --> %s\n' % (afpath, saferelpath)
+                rename_index_map[afpath] = saferelpath
 
-            localpath = os.path.join(budir, saferelpath)
-            os.makedirs(os.path.dirname(localpath), exist_ok=True)
+            src_dsts.append(afpath)
+            src_dsts.append(os.path.join(budir, saferelpath))
 
-            file_task = progress.add_task(
-                '', total=size, kind='file', filename=afpath)
-            for line in invoke_adb('pull', afpath, localpath, progress_to_stop_on_error=progress):
-                # will output avg transfer speed info after transfer has finished,
-                # otherwise: [ nn]% <filename>
-                if line.startswith('['):
-                    try:  # apparently shit can go wrong here too
-                        percentage = int(line[1:4].strip())
-                        progress.update(
-                            file_task, completed=percentage/100 * size)
-                        progress.update(
-                            overall_task, completed=total_bytes_copied + percentage/100 * size)
-                    except ValueError:
-                        pass
-            progress.remove_task(file_task)
+        fileno = 0
+        cur_size = 0
+        cur_file = None
+        file_task = None
+        for is_stderr, line in invoke_adb('pull-batch', '-a', '-I', stdin='\n'.join(src_dsts),
+                                          progress_to_stop_on_error=progress, raise_adb_error=True):
+            # adb doesn't immediately exit on these errors
+            if is_stderr:
+                err = line.lstrip('adb: error: ')
+                # if this somehow happens (remote object '...' doesn't exist)
+                if err.startswith("remote object '") or \
+                   err.startswith("failed to stat remote object '") or \
+                   err.startswith("failed to create directory '") or \
+                   err.startswith("cannot create '") or \
+                   err.startswith("unexpected ID_DONE") or \
+                   err.startswith("failed to copy '") or \
+                   err.startswith("msg.data.size too large: ") or \
+                   err.startswith("decompress failed") or \
+                   err.startswith("cannot write '"):
+                    progress.console.print(
+                        "[on red]ERROR[/] [r]\\[ADB][/] %s" % escape(err))
+                    adb_err_handled = True
+                else:
+                    adb_err_handled = False
 
-            total_bytes_copied += size
-            transferred.append((mtime, size, afpath))
+            elif line.startswith(_s := '[batch] pulling '):
+                afpath = line[len(_s):]
+                fileno += 1
+                total_bytes_copied += cur_size
+                mtime, cur_size = meta_lookup[afpath]
 
-except (KeyboardInterrupt, ADBError):
+                if cur_file:
+                    transferred.append(cur_file)
+                    if saferelpath := rename_index_map.get(cur_file[2], None):
+                        rename_index += '%s --> %s\n' % (cur_file[2], saferelpath)
+                cur_file = (mtime, cur_size, afpath)
+
+                progress.start_task(overall_task)
+                progress.update(overall_task,  # run while you still can
+                                fileno=str(fileno).ljust(len(str(len(to_copy)))))
+                if file_task:
+                    progress.remove_task(file_task)
+                file_task = progress.add_task('', total=cur_size,
+                                              filename=afpath, kind='file')
+
+            # will output avg transfer speed info after transfer has finished,
+            # otherwise: [ nn]% <filename>
+            elif line.startswith('['):
+                try:  # apparently shit can go wrong here too
+                    percentage = int(line[1:4].strip())
+                    bytes_copied = percentage/100 * cur_size
+                    progress.update(file_task, completed=bytes_copied)
+                    progress.update(
+                        overall_task, completed=total_bytes_copied + bytes_copied)
+                except ValueError:
+                    pass
+
+            elif line.startswith(_s := 'adb: warning: '):
+                progress.console.print(
+                    '[on yellow]WARN[/] [r]\\[ADB][/] %s' % escape(line[len(_s):]))
+
+except (KeyboardInterrupt, ADBError) as e:
+    if isinstance(e, ADBError) and not adb_err_handled:
+        if e.err:
+            con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' % escape(e.err))
+        else:
+            con.print('[on red]FATAL[/] unexpected failure (device disconnected?)')
+
     with open(os.path.join(budir, '.partial_android_files'), 'w', encoding='utf8') as f:
         for mtime, size, fpath in transferred:
             f.write('%s|%d|%s\n' % (mtime, size, fpath))
 
     write_rename_index()
 
-    con.print('[red]Interrupted.[/] [magenta].partial_android_files[/] written.')
+    con.print('[red]%s.[/] [magenta].partial_android_files[/] written.' %
+              ('Interrupted' if isinstance(e, KeyboardInterrupt) else 'Transfer incomplete'))
 
     sys.exit()
 
@@ -298,6 +390,7 @@ if recovery_mode:
 with open(os.path.join(budir, '.android_files'), 'w', encoding='utf8') as f:
     for af in android_files:
         f.write('%s\n' % af)
+
 
 program_time = (time.time() - program_start_time)
 program_time_fmat = ('%dh ' % (program_time / 3600) if program_time >= 3600 else '') + \

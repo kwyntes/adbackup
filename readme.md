@@ -1,7 +1,8 @@
 # adbackup
 
-uses a modified version of adb (3 lines commented out) that always outputs
-progress info, even its output is redirected.
+![screenshot](screenshot.png)
+
+[**uses a modified version of adb**](https://github.com/kwyntes/adbackup-adb).
 
 ### features
 
@@ -9,8 +10,9 @@ progress info, even its output is redirected.
 - [x] recoverable in case device disconnects / user terminates backup
 - [ ] custom postprocessing hooks
 
-possible improvement: tar small files together if that's possible somehow so
-small file transfers aren't impacted by the round-trip overhead of spawning subprocesses.
+~~possible improvement: tar small files together if that's possible somehow so
+small file transfers aren't impacted by the round-trip overhead of spawning
+subprocesses.~~ solved by implementing `pull-batch`.
 
 ### issues
 
