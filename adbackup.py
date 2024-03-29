@@ -41,13 +41,18 @@ class ADBError(Exception):
         self.err = err
 
 
-def invoke_adb(*args, progress_to_stop_on_error=None, raise_adb_error=False):
+def invoke_adb(*args, stdin=None, progress_to_stop_on_error=None, raise_adb_error=False):
     try:
         proc = subprocess.Popen([ADB_EXE, *args],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
+                                stdin=subprocess.PIPE if stdin else None,
                                 encoding='utf8',
                                 universal_newlines=True)
+
+        if stdin:
+            proc.stdin.write(stdin)
+            proc.stdin.close()
 
         queue = Queue()
 
@@ -100,6 +105,9 @@ def invoke_adb(*args, progress_to_stop_on_error=None, raise_adb_error=False):
                 sys.exit()
 
     except FileNotFoundError:
+        if progress_to_stop_on_error:
+            progress_to_stop_on_error.stop()
+
         con.print('[on red]FATAL[/] ADB executable (%s) not found' %
                   escape(ADB_EXE))
         sys.exit()
@@ -117,7 +125,7 @@ with con.status('Fetching file list...'):
     # printf: <last modified epoch>|<size>|<fpath>
     # will break when filenames contain newlines but that's just ridiculous
     android_files = []
-    for line in invoke_adb(
+    for _, line in invoke_adb(
             'exec-out', rf"find -H '{ANDROID_PATH}' -type f -printf '%T@|%s|%p\n'"):
         android_files.append(line)
 
@@ -268,8 +276,8 @@ meta_lookup = {afpath: (mtime, size) for mtime, size, afpath in to_copy}
 adb_err_handled = False
 try:
     with TransferProgress() as progress:
-        overall_task = progress.add_task('', kind='overall', totalfiles=len(to_copy),
-                                         total=total_bytes_to_copy, fileno='')
+        overall_task = progress.add_task('', start=False, kind='overall', totalfiles=len(to_copy),
+                                         total=total_bytes_to_copy, fileno=' '*len(str(len(to_copy))))
 
         src_dsts = []
         rename_index_map = {}
@@ -285,7 +293,7 @@ try:
         fileno = 0
         cur_size = 0
         file_task = None
-        for is_stderr, line in invoke_adb('pull-batch', '-a', '--', *src_dsts,
+        for is_stderr, line in invoke_adb('pull-batch', '-a', '-I', stdin='\n'.join(src_dsts),
                                           progress_to_stop_on_error=progress):
             # adb doesn't immediately exit on these errors
             if is_stderr:
@@ -316,9 +324,11 @@ try:
                 if saferelpath := rename_index_map[afpath]:
                     rename_index += '%s --> %s\n' % (afpath, saferelpath)
 
+                progress.start_task(overall_task)
                 progress.update(overall_task,  # run while you still can
                                 fileno=str(fileno).ljust(len(str(len(to_copy)))))
-                progress.remove_task(file_task)
+                if file_task:
+                    progress.remove_task(file_task)
                 file_task = progress.add_task('', total=cur_size,
                                               filename=afpath, kind='file')
 
