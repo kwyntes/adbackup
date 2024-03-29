@@ -296,7 +296,7 @@ try:
         cur_file = None
         file_task = None
         for is_stderr, line in invoke_adb('pull-batch', '-a', '-I', stdin='\n'.join(src_dsts),
-                                          progress_to_stop_on_error=progress):
+                                          progress_to_stop_on_error=progress, raise_adb_error=True):
             # adb doesn't immediately exit on these errors
             if is_stderr:
                 err = line.lstrip('adb: error: ')
