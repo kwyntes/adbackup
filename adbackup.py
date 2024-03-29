@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Thread
+from copy import deepcopy
 
 from pathvalidate import sanitize_filepath
 from rich.console import Console
@@ -194,6 +195,7 @@ else:
 
 to_copy = []
 to_link = []
+transferred = []
 for af in android_files:
     mtime, size, fpath = af.split('|', 2)
     lix = bisect_left(last_android_files, fpath, key=lambda x: x[2])
@@ -205,7 +207,7 @@ for af in android_files:
             llix = bisect_left(last_linkable_android_files,
                                fpath, key=lambda x: x[2])
             if llix == len(last_linkable_android_files) or last_linkable_android_files[llix][2] != fpath:
-                # not in last_linkable_android_fiiles, file actually is new
+                # not in last_linkable_android_files, file actually is new
                 to_copy.append((mtime, int(size), fpath))
             else:
                 llmtime = last_linkable_android_files[llix][0]
@@ -223,9 +225,10 @@ for af in android_files:
         elif not recovery_mode:
             # file up to date
             to_link.append(fpath)
-
-            # (if in recovery mode, the file will already be present in the
-            # current directory, so we don't need to link anything)
+        else:
+            # if in recovery mode, the file will already be present in the
+            # current directory because it was transferred last time
+            transferred.append((mtime, size, fpath))
 
 
 class TransferProgress(Progress):
@@ -256,9 +259,6 @@ if recovery_mode and os.path.isfile(os.path.join(budir, '.rename_index')):
         rename_index = f.read()
 else:
     rename_index = ''
-
-
-transferred = []
 
 
 def write_rename_index():
