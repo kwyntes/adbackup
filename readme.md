@@ -1,7 +1,8 @@
 # adbackup
 
-uses a modified version of adb (3 lines commented out) that always outputs
-progress info, even its output is redirected.
+![screenshot](screenshot.png)
+
+[**uses a modified version of adb**](https://github.com/kwyntes/adbackup-adb).
 
 ### features
 
