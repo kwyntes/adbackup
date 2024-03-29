@@ -292,6 +292,7 @@ try:
 
         fileno = 0
         cur_size = 0
+        cur_file = None
         file_task = None
         for is_stderr, line in invoke_adb('pull-batch', '-a', '-I', stdin='\n'.join(src_dsts),
                                           progress_to_stop_on_error=progress):
@@ -320,9 +321,11 @@ try:
                 total_bytes_copied += cur_size
                 mtime, cur_size = meta_lookup[afpath]
 
-                transferred.append((mtime, cur_size, afpath))
-                if saferelpath := rename_index_map[afpath]:
-                    rename_index += '%s --> %s\n' % (afpath, saferelpath)
+                if cur_file:
+                    transferred.append(cur_file)
+                    if saferelpath := rename_index_map[cur_file[2]]:
+                        rename_index += '%s --> %s\n' % (cur_file[2], saferelpath)
+                cur_file = (mtime, cur_size, afpath)
 
                 progress.start_task(overall_task)
                 progress.update(overall_task,  # run while you still can
