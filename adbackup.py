@@ -354,11 +354,11 @@ try:
                     '[on yellow]WARN[/] [r]\\[ADB][/] %s' % escape(line[len(_s):]))
 
 except (KeyboardInterrupt, ADBError) as e:
-    if isinstance(e, ADBError) and not adb_err_handled:
-        if e.err:
-            con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' % escape(e.err))
-        else:
+    if isinstance(e, ADBError):
+        if not e.err:
             con.print('[on red]FATAL[/] unexpected failure (device disconnected?)')
+        elif not adb_err_handled:
+            con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' % escape(e.err))
 
     with open(os.path.join(budir, '.partial_android_files'), 'w', encoding='utf8') as f:
         for mtime, size, fpath in transferred:
