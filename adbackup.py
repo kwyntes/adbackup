@@ -228,7 +228,7 @@ for af in android_files:
         else:
             # if in recovery mode, the file will already be present in the
             # current directory because it was transferred last time
-            transferred.append((mtime, size, fpath))
+            transferred.append((mtime, int(size), fpath))
 
 
 class TransferProgress(Progress):
