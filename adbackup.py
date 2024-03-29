@@ -330,7 +330,8 @@ try:
 
                 progress.start_task(overall_task)
                 progress.update(overall_task,  # run while you still can
-                                fileno=str(fileno).ljust(len(str(len(to_copy)))))
+                                fileno=str(fileno).ljust(len(str(len(to_copy)))),
+                                completed=total_bytes_copied)
                 if file_task:
                     progress.remove_task(file_task)
                 file_task = progress.add_task('', total=cur_size,
