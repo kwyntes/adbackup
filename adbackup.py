@@ -284,7 +284,7 @@ try:
         rename_index_map = {}
         for _, _, afpath in to_copy:
             relpath = os.path.relpath(afpath, ANDROID_PATH)
-            saferelpath = sanitize_filepath(relpath)
+            saferelpath = sanitize_filepath(relpath, platform='auto')
             if saferelpath != relpath:
                 rename_index_map[afpath] = saferelpath
 
@@ -324,7 +324,7 @@ try:
 
                 if cur_file:
                     transferred.append(cur_file)
-                    if saferelpath := rename_index_map[cur_file[2]]:
+                    if saferelpath := rename_index_map.get(cur_file[2], None):
                         rename_index += '%s --> %s\n' % (cur_file[2], saferelpath)
                 cur_file = (mtime, cur_size, afpath)
 
