@@ -245,6 +245,7 @@ class TransferProgress(Progress):
                                 "[progress.percentage]{task.percentage:>3.1f}%",
                                 "•", FileSizeColumn(),
                                 "/", TotalFileSizeColumn(),
+                                "•", TransferSpeedColumn(),
                                 "•", TimeElapsedColumn(),
                                 "•", TimeRemainingColumn())
             yield self.make_tasks_table([task])
