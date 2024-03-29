@@ -10,8 +10,9 @@
 - [x] recoverable in case device disconnects / user terminates backup
 - [ ] custom postprocessing hooks
 
-possible improvement: tar small files together if that's possible somehow so
-small file transfers aren't impacted by the round-trip overhead of spawning subprocesses.
+~~possible improvement: tar small files together if that's possible somehow so
+small file transfers aren't impacted by the round-trip overhead of spawning
+subprocesses.~~ solved by implementing `pull-batch`.
 
 ### issues
 
