@@ -372,18 +372,19 @@ except (KeyboardInterrupt, ADBError) as e:
     sys.exit()
 
 
-for afpath in track(to_link, description='Hardlinking previously copied files...'):
-    relpath = os.path.relpath(afpath, ANDROID_PATH)
-    saferelpath = sanitize_filepath(relpath)
-    if saferelpath != relpath:
-        rename_index += '%s --> %s\n' % (afpath, saferelpath)
+if to_link:
+    for afpath in track(to_link, description='Hardlinking previously copied files...'):
+        relpath = os.path.relpath(afpath, ANDROID_PATH)
+        saferelpath = sanitize_filepath(relpath)
+        if saferelpath != relpath:
+            rename_index += '%s --> %s\n' % (afpath, saferelpath)
 
-    localpath = os.path.join(budir, saferelpath)
-    os.makedirs(os.path.dirname(localpath), exist_ok=True)
+        localpath = os.path.join(budir, saferelpath)
+        os.makedirs(os.path.dirname(localpath), exist_ok=True)
 
-    srcpath = os.path.join(lastlinkabledir, saferelpath)
+        srcpath = os.path.join(lastlinkabledir, saferelpath)
 
-    os.link(srcpath, localpath)
+        os.link(srcpath, localpath)
 
 if recovery_mode:
     os.remove(os.path.join(budir, '.partial_android_files'))
