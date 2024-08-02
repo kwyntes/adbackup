@@ -8,7 +8,7 @@
 
 - [x] incremental backups
 - [x] recoverable in case device disconnects / user terminates backup
-- [ ] custom postprocessing hooks
+- [ ] keep file timestamps in backup (**todo**)
 
 ~~possible improvement: tar small files together if that's possible somehow so
 small file transfers aren't impacted by the round-trip overhead of spawning
