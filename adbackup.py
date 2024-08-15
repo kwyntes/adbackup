@@ -227,6 +227,11 @@ for af in android_files:
             transferred.append((mtime, int(size), fpath))
 
 
+if not recovery_mode and not to_copy:
+    con.print("[green]Last backup is still up to date![/] Aborting.")
+    sys.exit()
+
+
 class TransferProgress(Progress):
     def get_renderables(self):
         for task in self.tasks:
@@ -265,110 +270,111 @@ def write_rename_index():
         f.write(rename_index)
 
 
-total_bytes_to_copy = sum(size for _, size, _ in to_copy)
-total_bytes_copied = 0
+if to_copy:
+    total_bytes_to_copy = sum(size for _, size, _ in to_copy)
+    total_bytes_copied = 0
 
-meta_lookup = {afpath: (mtime, size) for mtime, size, afpath in to_copy}
+    meta_lookup = {afpath: (mtime, size) for mtime, size, afpath in to_copy}
 
-adb_err_handled = False
-try:
-    with TransferProgress() as progress:
-        overall_task = progress.add_task('', start=False, kind='overall', totalfiles=len(to_copy),
-                                         total=total_bytes_to_copy, fileno=' '*len(str(len(to_copy))))
+    adb_err_handled = False
+    try:
+        with TransferProgress() as progress:
+            overall_task = progress.add_task('', start=False, kind='overall', totalfiles=len(to_copy),
+                                             total=total_bytes_to_copy, fileno=' '*len(str(len(to_copy))))
 
-        src_dsts = []
-        rename_index_map = {}
-        for _, _, afpath in to_copy:
-            relpath = os.path.relpath(afpath, ANDROID_PATH)
-            saferelpath = sanitize_filepath(relpath, platform='auto')
-            if saferelpath != relpath:
-                rename_index_map[afpath] = saferelpath
+            src_dsts = []
+            rename_index_map = {}
+            for _, _, afpath in to_copy:
+                relpath = os.path.relpath(afpath, ANDROID_PATH)
+                saferelpath = sanitize_filepath(relpath, platform='auto')
+                if saferelpath != relpath:
+                    rename_index_map[afpath] = saferelpath
 
-            src_dsts.append(afpath)
-            src_dsts.append(os.path.join(budir, saferelpath))
+                src_dsts.append(afpath)
+                src_dsts.append(os.path.join(budir, saferelpath))
 
-        fileno = 0
-        cur_size = 0
-        cur_file = None
-        file_task = None
-        for is_stderr, line in invoke_adb('pull-batch', '-a', '-I', stdin='\n'.join(src_dsts),
-                                          progress_to_stop_on_error=progress, raise_adb_error=True):
-            # adb doesn't immediately exit on these errors
-            if is_stderr:
-                err = line.lstrip('adb: error: ')
-                # if this somehow happens (remote object '...' doesn't exist)
-                if err.startswith("remote object '") or \
-                   err.startswith("failed to stat remote object '") or \
-                   err.startswith("failed to create directory '") or \
-                   err.startswith("cannot create '") or \
-                   err.startswith("unexpected ID_DONE") or \
-                   err.startswith("failed to copy '") or \
-                   err.startswith("msg.data.size too large: ") or \
-                   err.startswith("decompress failed") or \
-                   err.startswith("cannot write '"):
+            fileno = 0
+            cur_size = 0
+            cur_file = None
+            file_task = None
+            for is_stderr, line in invoke_adb('pull-batch', '-a', '-I', stdin='\n'.join(src_dsts),
+                                              progress_to_stop_on_error=progress, raise_adb_error=True):
+                # adb doesn't immediately exit on these errors
+                if is_stderr:
+                    err = line.lstrip('adb: error: ')
+                    # if this somehow happens (remote object '...' doesn't exist)
+                    if err.startswith("remote object '") or \
+                       err.startswith("failed to stat remote object '") or \
+                       err.startswith("failed to create directory '") or \
+                       err.startswith("cannot create '") or \
+                       err.startswith("unexpected ID_DONE") or \
+                       err.startswith("failed to copy '") or \
+                       err.startswith("msg.data.size too large: ") or \
+                       err.startswith("decompress failed") or \
+                       err.startswith("cannot write '"):
+                        progress.console.print(
+                            "[on red]ERROR[/] [r]\\[ADB][/] %s" % escape(err))
+                        adb_err_handled = True
+                    else:
+                        adb_err_handled = False
+
+                elif line.startswith(_s := '[batch] pulling '):
+                    afpath = line[len(_s):]
+                    fileno += 1
+                    total_bytes_copied += cur_size
+                    mtime, cur_size = meta_lookup[afpath]
+
+                    if cur_file:
+                        transferred.append(cur_file)
+                        if saferelpath := rename_index_map.get(cur_file[2], None):
+                            rename_index += '%s --> %s\n' % (
+                                cur_file[2], saferelpath)
+                    cur_file = (mtime, cur_size, afpath)
+
+                    progress.start_task(overall_task)
+                    progress.update(overall_task,  # run while you still can
+                                    fileno=str(fileno).ljust(
+                                        len(str(len(to_copy)))),
+                                    completed=total_bytes_copied)
+                    if file_task:
+                        progress.remove_task(file_task)
+                    file_task = progress.add_task('', total=cur_size,
+                                                  filename=afpath, kind='file')
+
+                # will output avg transfer speed info after transfer has finished,
+                # otherwise: [ nn]% <filename>
+                elif line.startswith('['):
+                    try:  # apparently shit can go wrong here too
+                        percentage = int(line[1:4].strip())
+                        bytes_copied = percentage/100 * cur_size
+                        progress.update(file_task, completed=bytes_copied)
+                        progress.update(
+                            overall_task, completed=total_bytes_copied + bytes_copied)
+                    except ValueError:
+                        pass
+
+                elif line.startswith(_s := 'adb: warning: '):
                     progress.console.print(
-                        "[on red]ERROR[/] [r]\\[ADB][/] %s" % escape(err))
-                    adb_err_handled = True
-                else:
-                    adb_err_handled = False
+                        '[on yellow]WARN[/] [r]\\[ADB][/] %s' % escape(line[len(_s):]))
 
-            elif line.startswith(_s := '[batch] pulling '):
-                afpath = line[len(_s):]
-                fileno += 1
-                total_bytes_copied += cur_size
-                mtime, cur_size = meta_lookup[afpath]
+    except (KeyboardInterrupt, ADBError) as e:
+        if isinstance(e, ADBError):
+            if not e.err:
+                con.print(
+                    '[on red]FATAL[/] unexpected failure (device disconnected?)')
+            elif not adb_err_handled:
+                con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' % escape(e.err))
 
-                if cur_file:
-                    transferred.append(cur_file)
-                    if saferelpath := rename_index_map.get(cur_file[2], None):
-                        rename_index += '%s --> %s\n' % (
-                            cur_file[2], saferelpath)
-                cur_file = (mtime, cur_size, afpath)
+        with open(os.path.join(budir, '.partial_android_files'), 'w', encoding='utf8') as f:
+            for mtime, size, fpath in transferred:
+                f.write('%s|%d|%s\n' % (mtime, size, fpath))
 
-                progress.start_task(overall_task)
-                progress.update(overall_task,  # run while you still can
-                                fileno=str(fileno).ljust(
-                                    len(str(len(to_copy)))),
-                                completed=total_bytes_copied)
-                if file_task:
-                    progress.remove_task(file_task)
-                file_task = progress.add_task('', total=cur_size,
-                                              filename=afpath, kind='file')
+        write_rename_index()
 
-            # will output avg transfer speed info after transfer has finished,
-            # otherwise: [ nn]% <filename>
-            elif line.startswith('['):
-                try:  # apparently shit can go wrong here too
-                    percentage = int(line[1:4].strip())
-                    bytes_copied = percentage/100 * cur_size
-                    progress.update(file_task, completed=bytes_copied)
-                    progress.update(
-                        overall_task, completed=total_bytes_copied + bytes_copied)
-                except ValueError:
-                    pass
+        con.print('[red]%s.[/] [magenta].partial_android_files[/] written.' %
+                  ('Interrupted' if isinstance(e, KeyboardInterrupt) else 'Transfer incomplete'))
 
-            elif line.startswith(_s := 'adb: warning: '):
-                progress.console.print(
-                    '[on yellow]WARN[/] [r]\\[ADB][/] %s' % escape(line[len(_s):]))
-
-except (KeyboardInterrupt, ADBError) as e:
-    if isinstance(e, ADBError):
-        if not e.err:
-            con.print(
-                '[on red]FATAL[/] unexpected failure (device disconnected?)')
-        elif not adb_err_handled:
-            con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' % escape(e.err))
-
-    with open(os.path.join(budir, '.partial_android_files'), 'w', encoding='utf8') as f:
-        for mtime, size, fpath in transferred:
-            f.write('%s|%d|%s\n' % (mtime, size, fpath))
-
-    write_rename_index()
-
-    con.print('[red]%s.[/] [magenta].partial_android_files[/] written.' %
-              ('Interrupted' if isinstance(e, KeyboardInterrupt) else 'Transfer incomplete'))
-
-    sys.exit()
+        sys.exit()
 
 
 if to_link:
