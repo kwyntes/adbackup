@@ -8,7 +8,9 @@
 
 - [x] incremental backups
 - [x] recoverable in case device disconnects / user terminates backup
-- [ ] keep file timestamps in backup (**todo**)
+- [ ] preserve file creation times (**todo**) \
+      sadly the ToyBox (like coreutils, but shit) implementation of find doesn't
+      have a printf format specifier for the file's creation time and `find . -exec stat -c %y {} \;` is really slow
 
 ~~possible improvement: tar small files together if that's possible somehow so
 small file transfers aren't impacted by the round-trip overhead of spawning
