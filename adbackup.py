@@ -3,20 +3,16 @@ import subprocess
 import sys
 import time
 from bisect import bisect_left
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Thread
-from copy import deepcopy
 
 from pathvalidate import sanitize_filepath
 from rich.console import Console
 from rich.markup import escape
-from rich.progress import (BarColumn, FileSizeColumn, MofNCompleteColumn,
-                           Progress, TextColumn, TimeElapsedColumn,
-                           TimeRemainingColumn, TotalFileSizeColumn,
-                           TransferSpeedColumn, track)
+from rich.progress import (BarColumn, FileSizeColumn, Progress, TextColumn,
+                           TimeElapsedColumn, TimeRemainingColumn,
+                           TotalFileSizeColumn, TransferSpeedColumn, track)
 
 ####################################################
 
@@ -325,12 +321,14 @@ try:
                 if cur_file:
                     transferred.append(cur_file)
                     if saferelpath := rename_index_map.get(cur_file[2], None):
-                        rename_index += '%s --> %s\n' % (cur_file[2], saferelpath)
+                        rename_index += '%s --> %s\n' % (
+                            cur_file[2], saferelpath)
                 cur_file = (mtime, cur_size, afpath)
 
                 progress.start_task(overall_task)
                 progress.update(overall_task,  # run while you still can
-                                fileno=str(fileno).ljust(len(str(len(to_copy)))),
+                                fileno=str(fileno).ljust(
+                                    len(str(len(to_copy)))),
                                 completed=total_bytes_copied)
                 if file_task:
                     progress.remove_task(file_task)
@@ -356,7 +354,8 @@ try:
 except (KeyboardInterrupt, ADBError) as e:
     if isinstance(e, ADBError):
         if not e.err:
-            con.print('[on red]FATAL[/] unexpected failure (device disconnected?)')
+            con.print(
+                '[on red]FATAL[/] unexpected failure (device disconnected?)')
         elif not adb_err_handled:
             con.print('[on red]FATAL[/] [r]\\[ADB][/] %s' % escape(e.err))
 
