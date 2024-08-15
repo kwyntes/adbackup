@@ -17,7 +17,7 @@ from rich.progress import (BarColumn, FileSizeColumn, Progress, TextColumn,
 ####################################################
 
 # make sure this will always produce a valid dirname
-DATEFORMAT = r'%d-%m-%Y, %Hh%Mm%Ss'
+DATEFORMAT = r'%Y-%m-%d, %Hh%Mm%Ss'
 
 ANDROID_PATH = '/sdcard'
 
