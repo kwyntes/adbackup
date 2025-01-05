@@ -119,13 +119,12 @@ with con.status('Waiting for device', spinner='clock'):
 
 
 with con.status('Fetching file list...'):
-    # printf: <last modified epoch>|<size>|<fpath>
-    # will break when filenames contain newlines but that's just ridiculous
-    android_files = []
+    # printf: <last modified epoch>|<size>|<fpath>\0
+    stdout = ''
     for _, line in invoke_adb(
-            'exec-out', rf"find -H '{ANDROID_PATH}' -type f -printf '%T@|%s|%p\n'"):
-        android_files.append(line)
-
+            'exec-out', rf"find -H '{ANDROID_PATH}' -type f -printf '%T@|%s|%p\0'"):
+        stdout += line+'\n'
+    android_files = stdout[:-1].split('\0')
 
 lastbudir = None
 lastbudate = None
