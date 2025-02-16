@@ -187,15 +187,40 @@ if recovery_mode:
 else:
     con.print("Backing up into [bold magenta]%s[/]" % escape(budir))
 
+no_incremental = False
+exclude_list = []
+a_exclude = False
+for arg in sys.argv[1:]:
+    if a_exclude:
+        exclude_list.append(arg)
+        a_exclude = False
+    elif arg == "--exclude" or arg == "-x":
+        a_exclude = True
+    elif arg == "--new":
+        no_incremental = True
+if a_exclude:
+    print("expected argument after -x/--exclude")
+    sys.exit(1)
 
 to_copy = []
 to_link = []
 transferred = []
 for af in android_files:
     mtime, size, fpath = af.split('|', 2)
+
+    # this is really limited but it's better than nothing
+    # it's not that i can't write anything better than this, it's that i lack
+    # the energy to do so
+    if exclude_list and any(fpath == ex or
+                            ex.startswith("*") and ex.endswith("*") and ex[1:-1] in fpath or
+                            ex.endswith("*") and fpath.startswith(ex[:-1]) or
+                            ex.startswith("*") and fpath.endswith(ex[1:])
+                            for ex in exclude_list):
+        continue
+
     lix = bisect_left(last_android_files, fpath, key=lambda x: x[2])
     if lix == len(last_android_files) or last_android_files[lix][2] != fpath:
-        if not recovery_mode:
+        if not recovery_mode or no_incremental:
             # not in last_android_files, file is new
             to_copy.append((mtime, int(size), fpath))
         else:
@@ -212,6 +237,8 @@ for af in android_files:
                 else:
                     # file up to date
                     to_link.append(fpath)
+    elif no_incremental and not recovery_mode:
+        to_copy.append((mtime, int(size), fpath))
     else:
         lmtime = last_android_files[lix][0]
         if float(mtime) > float(lmtime):

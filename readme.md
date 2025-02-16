@@ -16,6 +16,21 @@
 small file transfers aren't impacted by the round-trip overhead of spawning
 subprocesses.~~ solved by implementing `pull-batch`.
 
+### usage
+
+```
+> python3 adbackup.py [flags]
+
+-x, --exclude FILE      exclude this file from the backup. wildcards (*) can be
+                        used only at the start and/or end of FILE, and are treated
+                        as part of the filename if used anywhere else.
+--new                   do not backup incrementally. useful when the .android_files
+                        of the previous backup got fucked somehow, likely because
+                        i am bad at writing software and this program is made of
+                        so much spaghetti that it could feed a man for an entire
+                        year.
+```
+
 ### issues
 
 - for some weird fucking reason `adb.exe` sometimes randomly decides to stop
