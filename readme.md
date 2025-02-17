@@ -10,7 +10,9 @@
 - [x] recoverable in case device disconnects / user terminates backup
 - [ ] preserve file creation times (**todo**) \
       sadly the ToyBox (like coreutils, but shit) implementation of find doesn't
-      have a printf format specifier for the file's creation time and `find . -exec stat -c %y {} \;` is really slow
+      have a printf format specifier for the file's creation time and `find . -exec stat -c %y {} \;` is really slow  
+      *WORKAROUND: we can write a custom binary in Rust and compile it for android,
+      which can be executed without requiring root access when copied to `/data/local/tmp`* 
 
 ~~possible improvement: tar small files together if that's possible somehow so
 small file transfers aren't impacted by the round-trip overhead of spawning
